@@ -1,0 +1,159 @@
+// Cyborg 15 boot splash.
+// Outer neon ring spins, dashed inner ring counter-rotates, hex core pulses.
+// Boot shows a progress bar; LUKS prompts swap the bar for a password box.
+
+Window.SetBackgroundTopColor(0.03, 0.05, 0.09);
+Window.SetBackgroundBottomColor(0.00, 0.00, 0.02);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+scale = screen_h / 1080;
+if (scale <= 0) scale = 1;
+
+fun load(name) {
+    img = Image(name);
+    if (scale != 1)
+        img = img.Scale(Math.Int(img.GetWidth() * scale), Math.Int(img.GetHeight() * scale));
+    return img;
+}
+
+fun center_x(img) { return Window.GetX() + Math.Int((screen_w - img.GetWidth()) / 2); }
+
+ring_img = load("ring.png");
+inner_img = load("inner.png");
+core_img = load("core.png");
+logo_img = load("logo.png");
+track_img = load("bar-track.png");
+fill_img = load("bar-fill.png");
+entry_img = load("entry.png");
+bullet_img = load("bullet.png");
+
+ring_cy = Window.GetY() + Math.Int(screen_h * 0.40);
+
+ring = Sprite(ring_img);
+ring.SetPosition(center_x(ring_img), ring_cy - ring_img.GetHeight() / 2, 10);
+inner = Sprite(inner_img);
+inner.SetPosition(center_x(inner_img), ring_cy - inner_img.GetHeight() / 2, 11);
+core = Sprite(core_img);
+core.SetPosition(center_x(core_img), ring_cy - core_img.GetHeight() / 2, 12);
+
+logo_y = ring_cy + Math.Int(150 * scale);
+logo = Sprite(logo_img);
+logo.SetPosition(center_x(logo_img), logo_y, 10);
+
+bar_x = center_x(track_img);
+bar_y = logo_y + logo_img.GetHeight() + Math.Int(40 * scale);
+track = Sprite(track_img);
+track.SetPosition(bar_x, bar_y, 10);
+fill = Sprite();
+fill.SetPosition(bar_x, bar_y, 11);
+
+entry_x = center_x(entry_img);
+entry_y = bar_y - Math.Int(20 * scale);
+entry = Sprite(entry_img);
+entry.SetPosition(entry_x, entry_y, 20);
+entry.SetOpacity(0);
+
+prompt = Sprite();
+prompt.SetZ(20);
+message = Sprite();
+message.SetZ(20);
+
+max_bullets = 22;
+for (i = 0; i < max_bullets; i++) {
+    bullets[i] = Sprite(bullet_img);
+    bullets[i].SetPosition(entry_x + Math.Int((72 + i * 16) * scale),
+                           entry_y + Math.Int((entry_img.GetHeight() - bullet_img.GetHeight()) / 2), 21);
+    bullets[i].SetOpacity(0);
+}
+
+fun set_text(sprite, text, y, r, g, b) {
+    img = Image.Text(text, r, g, b, 1, "Sans " + Math.Int(13 * scale));
+    sprite.SetImage(img);
+    sprite.SetX(Window.GetX() + Math.Int((screen_w - img.GetWidth()) / 2));
+    sprite.SetY(y);
+}
+
+// Shutdown / reboot: no progress bar, just a status line.
+mode = Plymouth.GetMode();
+if (mode == "shutdown" || mode == "reboot") {
+    track.SetOpacity(0);
+    if (mode == "shutdown") label = "SHUTTING DOWN"; else label = "REBOOTING";
+    set_text(message, label, bar_y - Math.Int(4 * scale), 0.0, 0.9, 1.0);
+}
+
+// ---- animation -----------------------------------------------------------
+
+t = 0;
+fade = 0;
+fun refresh_callback() {
+    global.t++;
+    if (global.fade < 1) global.fade = Math.Min(1, global.fade + 0.04);
+
+    a = global.t * 0.045;
+    ring.SetImage(ring_img.Rotate(a));
+    inner.SetImage(inner_img.Rotate(-a * 0.6));
+
+    pulse = 0.65 + 0.35 * Math.Sin(global.t * 0.08);
+    core.SetOpacity(pulse * global.fade);
+    ring.SetOpacity(global.fade);
+    inner.SetOpacity(0.8 * global.fade);
+    logo.SetOpacity(global.fade);
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+// ---- boot progress -------------------------------------------------------
+
+fun progress_callback(duration, progress) {
+    w = Math.Int(fill_img.GetWidth() * Math.Clamp(progress, 0, 1));
+    if (w < 1) w = 1;
+    fill.SetImage(fill_img.Scale(w, fill_img.GetHeight()));
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+// ---- password / question / normal ---------------------------------------
+
+fun show_bar(visible) {
+    track.SetOpacity(visible);
+    fill.SetOpacity(visible);
+    entry.SetOpacity(1 - visible);
+}
+
+fun display_normal_callback() {
+    show_bar(1);
+    prompt.SetOpacity(0);
+    for (i = 0; i < max_bullets; i++) bullets[i].SetOpacity(0);
+}
+
+fun display_password_callback(prompt_text, count) {
+    show_bar(0);
+    set_text(prompt, prompt_text, entry_y + entry_img.GetHeight() + Math.Int(14 * scale), 0.75, 0.95, 1.0);
+    prompt.SetOpacity(1);
+    for (i = 0; i < max_bullets; i++) {
+        if (i < count) bullets[i].SetOpacity(1); else bullets[i].SetOpacity(0);
+    }
+}
+
+fun display_question_callback(prompt_text, entry_text) {
+    show_bar(0);
+    set_text(prompt, prompt_text + "  " + entry_text, entry_y + entry_img.GetHeight() + Math.Int(14 * scale), 0.75, 0.95, 1.0);
+    prompt.SetOpacity(1);
+    for (i = 0; i < max_bullets; i++) bullets[i].SetOpacity(0);
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayQuestionFunction(display_question_callback);
+
+// ---- messages ------------------------------------------------------------
+
+fun message_callback(text) {
+    set_text(message, text, Window.GetY() + screen_h - Math.Int(70 * scale), 0.55, 0.75, 0.85);
+}
+Plymouth.SetMessageFunction(message_callback);
+
+fun quit_callback() {
+    show_bar(0);
+    entry.SetOpacity(0);
+}
+Plymouth.SetQuitFunction(quit_callback);

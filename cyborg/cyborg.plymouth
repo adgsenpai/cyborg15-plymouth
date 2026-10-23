@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Cyborg 15
+Description=Neon ring boot splash for the MSI Cyborg 15
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/cyborg
+ScriptFile=/usr/share/plymouth/themes/cyborg/cyborg.script
